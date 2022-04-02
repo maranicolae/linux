@@ -43,6 +43,7 @@ static struct my_device_data {
 	/* TODO 2: add flag */
 	bool use_blocking_op;
 	/* TODO 3: add work */
+	struct work_struct my_work;
 	/* TODO 4: add list for monitored processes */
 	/* TODO 4: add spinlock to protect list */
 } dev;
@@ -77,23 +78,28 @@ static struct mon_proc *get_proc(pid_t pid)
 
 
 /* TODO 3: define work handler */
+static void my_work_handler(struct work_struct * work)
+{
+	alloc_io();
+}
 
 #define ALLOC_IO_DIRECT
 /* TODO 3: undef ALLOC_IO_DIRECT*/
+#undef ALLOC_IO_DIRECT
 
 static void timer_handler(struct timer_list *tl)
 {
 	/* TODO 1: implement timer handler */
 	/* TODO 2: check flags: TIMER_TYPE_SET or TIMER_TYPE_ALLOC */
-
 	if (!dev.use_blocking_op) {
 		struct task_struct *p = current;
 		pr_info("Comm: %s\n", p->comm);
 		pr_info("PID: %d\n", p->pid);
 	} else {
-		alloc_io();
-	}
 		/* TODO 3: schedule work */
+		schedule_work(&dev.my_work);
+	}
+
 		/* TODO 4: iterate the list and check the proccess state */
 			/* TODO 4: if task is dead print info ... */
 			/* TODO 4: ... decrement task usage counter ... */
@@ -176,6 +182,7 @@ static int deferred_init(void)
 	/* TODO 2: Initialize flag. */
 	dev.use_blocking_op = false;
 	/* TODO 3: Initialize work. */
+	INIT_WORK(&dev.my_work, my_work_handler);
 
 	/* TODO 4: Initialize lock and list. */
 
@@ -204,7 +211,7 @@ static void deferred_exit(void)
 	}
 
 	/* TODO 3: Cleanup: make sure the work handler is not scheduled. */
-
+	flush_scheduled_work();
 	/* TODO 4: Cleanup the monitered process list */
 		/* TODO 4: ... decrement task usage counter ... */
 		/* TODO 4: ... remove it from the list ... */
