@@ -38,7 +38,10 @@ struct mon_proc {
 static struct my_device_data {
 	struct cdev cdev;
 	/* TODO 1: add timer */
+	struct timer_list timer;
+	bool already_deleted_timer;
 	/* TODO 2: add flag */
+	bool use_blocking_op;
 	/* TODO 3: add work */
 	/* TODO 4: add list for monitored processes */
 	/* TODO 4: add spinlock to protect list */
@@ -82,6 +85,14 @@ static void timer_handler(struct timer_list *tl)
 {
 	/* TODO 1: implement timer handler */
 	/* TODO 2: check flags: TIMER_TYPE_SET or TIMER_TYPE_ALLOC */
+
+	if (!dev.use_blocking_op) {
+		struct task_struct *p = current;
+		pr_info("Comm: %s\n", p->comm);
+		pr_info("PID: %d\n", p->pid);
+	} else {
+		alloc_io();
+	}
 		/* TODO 3: schedule work */
 		/* TODO 4: iterate the list and check the proccess state */
 			/* TODO 4: if task is dead print info ... */
@@ -114,13 +125,21 @@ static long deferred_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 	switch (cmd) {
 		case MY_IOCTL_TIMER_SET:
 			/* TODO 2: set flag */
+			my_data->use_blocking_op = false;
 			/* TODO 1: schedule timer */
+			mod_timer(&my_data->timer, jiffies + arg * HZ);
+			my_data->already_deleted_timer = false;
 			break;
 		case MY_IOCTL_TIMER_CANCEL:
 			/* TODO 1: cancel timer */
+			del_timer_sync(&my_data->timer);
+			my_data->already_deleted_timer = true;
 			break;
 		case MY_IOCTL_TIMER_ALLOC:
 			/* TODO 2: set flag and schedule timer */
+			my_data->use_blocking_op = true;
+			pr_info("ioctl: %d\n", my_data->use_blocking_op);
+			mod_timer(&my_data->timer, jiffies + arg * HZ);
 			break;
 		case MY_IOCTL_TIMER_MON:
 		{
@@ -155,6 +174,7 @@ static int deferred_init(void)
 	}
 
 	/* TODO 2: Initialize flag. */
+	dev.use_blocking_op = false;
 	/* TODO 3: Initialize work. */
 
 	/* TODO 4: Initialize lock and list. */
@@ -163,7 +183,8 @@ static int deferred_init(void)
 	cdev_add(&dev.cdev, MKDEV(MY_MAJOR, MY_MINOR), 1);
 
 	/* TODO 1: Initialize timer. */
-
+	timer_setup(&dev.timer, timer_handler, 0);
+	dev.already_deleted_timer = false;
 	return 0;
 }
 
@@ -177,6 +198,11 @@ static void deferred_exit(void)
 	unregister_chrdev_region(MKDEV(MY_MAJOR, MY_MINOR), 1);
 
 	/* TODO 1: Cleanup: make sure the timer is not running after exiting. */
+	if (!dev.already_deleted_timer) {
+		del_timer_sync(&dev.timer);
+		dev.already_deleted_timer = true;
+	}
+
 	/* TODO 3: Cleanup: make sure the work handler is not scheduled. */
 
 	/* TODO 4: Cleanup the monitered process list */
