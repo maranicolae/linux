@@ -26,9 +26,13 @@ int my_thread_f(void *data)
 	pr_info("[my_thread_f] Current process id is %d (%s)\n",
 		current->pid, current->comm);
 	/* TODO: Wait for command to remove module on wq_stop_thread queue. */
+	wait_event_interruptible(wq_stop_thread, atomic_read(&flag_stop_thread) != 0);
 
 	/* TODO: set flag to mark kernel thread termination */
+	atomic_set(&flag_thread_terminated, 1);
 	/* TODO: notify the unload process that we have exited */
+	wake_up_interruptible(&wq_thread_terminated);
+
 	pr_info("[my_thread_f] Exiting\n");
 	do_exit(0);
 }
@@ -39,7 +43,10 @@ static int __init kthread_init(void)
 
 	/* TODO: init the waitqueues and flags */
 	/* TODO: create and start the kernel thread */
+	struct task_struct *p = current;
 
+	kthread_create(my_thread_f, NULL, "%skthread%d", "my", 0);
+	int wake_up_process(p);
 	return 0;
 }
 
