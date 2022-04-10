@@ -79,19 +79,21 @@ static int my_mmap(struct file *filp, struct vm_area_struct *vma)
 		return -EIO;
 
 	/* TODO 1: map pages individually */
-	while (length) {
-		pfn = vmalloc_to_pfn(vmalloc_area);
+	while (length > 0) {
+		pfn = vmalloc_to_pfn(vmalloc_area_ptr);
 
-		ret = remap_pfn_range(vma, start, pfn, length, vma->vm_page_prot);
+		ret = remap_pfn_range(vma, start, pfn, PAGE_SIZE, vma->vm_page_prot);
+
 		if (ret) {
 			return ret;
 		}
 
 		start += PAGE_SIZE;
-		vmalloc_area += PAGE_SIZE;
+		vmalloc_area_ptr += PAGE_SIZE;
 		length -= PAGE_SIZE;
 	}
 
+	pr_info("success mmap\n");
 	return 0;
 }
 
@@ -146,11 +148,14 @@ static int __init my_init(void)
 	}
 
 	/* TODO 1: allocate NPAGES using vmalloc */
-	vmalloc_area = vmalloc(NPAGES * PAGE_SIZE);
+	vmalloc_area = (char *)vmalloc(NPAGES * PAGE_SIZE);
+	if (vmalloc_area == NULL) {
+		return -ENOMEM;
+	}
 
 	/* TODO 1: mark pages as reserved */
-	for(i = 0; i < NPAGES * PAGE_SIZE; i += PAGE_SIZE) {
-        SetPageReserved(virt_to_page(((unsigned long)vmalloc_area) + i));
+	for (i = 0; i < NPAGES * PAGE_SIZE; i += PAGE_SIZE) {
+		SetPageReserved(vmalloc_to_page(vmalloc_area + i));
 	}
 
 	/* TODO 1: write data in each page */
