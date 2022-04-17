@@ -23,7 +23,7 @@ MODULE_LICENSE("GPL");
 
 #define KERN_LOG_LEVEL		KERN_ALERT
 
-#define MY_BLOCK_MAJOR		7
+#define MY_BLOCK_MAJOR		240
 #define MY_BLKDEV_NAME		"mybdev"
 #define MY_BLOCK_MINORS		1
 #define NR_SECTORS		128
@@ -67,6 +67,17 @@ static void my_block_transfer(struct my_block_dev *dev, sector_t sector,
 		return;
 
 	/* TODO 3: read/write to dev buffer depending on dir */
+	if (dir == 0) {
+		pr_err("read\n");
+		memcpy(buffer, dev->data + offset, len);
+	} else {
+		if (dir == 1) {
+			pr_err("write\n");
+			memcpy(dev->data + offset, buffer, len);
+		} else {
+			return;
+		}
+	}
 }
 
 /* to transfer data using bio structures enable USE_BIO_TRANFER */
@@ -86,21 +97,31 @@ static blk_status_t my_block_request(struct blk_mq_hw_ctx *hctx,
 	struct my_block_dev *dev = hctx->queue->queuedata;
 
 	/* TODO 2: get pointer to request */
-
+	rq = bd->rq;
 	/* TODO 2: start request processing. */
-
+	blk_mq_start_request(rq);
 	/* TODO 2: check fs request. Return if passthrough. */
+	if (blk_rq_is_passthrough(rq)) {
+		/* TODO 2: print request information */
+        printk(KERN_NOTICE "Skip non-fs request\n");
+        blk_mq_end_request(rq, BLK_STS_IOERR);
+        goto out;
+	}
 
-	/* TODO 2: print request information */
+	pr_info("Request received:\n");
+	pr_info("Start of sector: %llu\n", blk_rq_pos(rq));
+	pr_info("Total size: %u\n", blk_rq_bytes(rq));
+	pr_info("Direction: %hu\n", rq_data_dir(rq));
 
 #if USE_BIO_TRANSFER == 1
 	/* TODO 6: process the request by calling my_xfer_request */
 #else
 	/* TODO 3: process the request by calling my_block_transfer */
+	my_block_transfer(dev, blk_rq_pos(rq), blk_rq_bytes(rq), bio_data(rq->bio), rq_data_dir(rq));
 #endif
 
 	/* TODO 2: end request successfully */
-
+	blk_mq_end_request(rq, BLK_STS_OK);
 out:
 	return BLK_STS_OK;
 }
@@ -174,25 +195,6 @@ out_vmalloc:
 	return err;
 }
 
-static int __init my_block_init(void)
-{
-	int err = 0;
-
-	/* TODO 1: register block device */
-    err = register_blkdev(MY_BLOCK_MAJOR, MY_BLKDEV_NAME);
-    if (err < 0) {
-        pr_err("unable to register mybdev block device\n");
-        return -EBUSY;
-    }
-	/* TODO 2: create block device using create_block_device */
-
-	return 0;
-
-out:
-	/* TODO 2: unregister block device in case of an error */
-	return err;
-}
-
 static void delete_block_device(struct my_block_dev *dev)
 {
 	if (dev->gd) {
@@ -208,11 +210,34 @@ static void delete_block_device(struct my_block_dev *dev)
 		vfree(dev->data);
 }
 
+static int __init my_block_init(void)
+{
+	int err = 0;
+
+	/* TODO 1: register block device */
+    err = register_blkdev(MY_BLOCK_MAJOR, MY_BLKDEV_NAME);
+    if (err < 0) {
+        pr_err("unable to register mybdev block device\n");
+        return -EBUSY;
+    }
+	/* TODO 2: create block device using create_block_device */
+	create_block_device(&g_dev);
+
+	return 0;
+
+out:
+	/* TODO 2: unregister block device in case of an error */
+	delete_block_device(&g_dev);
+	return err;
+}
+
 static void __exit my_block_exit(void)
 {
 	/* TODO 2: cleanup block device using delete_block_device */
-	unregister_blkdev(MY_BLOCK_MAJOR, MY_BLKDEV_NAME);
+	delete_block_device(&g_dev);
 	/* TODO 1: unregister block device */
+	unregister_blkdev(MY_BLOCK_MAJOR, MY_BLKDEV_NAME);
+
 }
 
 module_init(my_block_init);
