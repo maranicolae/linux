@@ -27,6 +27,11 @@ static int myfs_create(struct inode *dir, struct dentry *dentry,
 static int myfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode);
 
 /* TODO 2: define super_operations structure */
+static const struct super_operations myfs_ops = {
+    .statfs         = simple_statfs,
+    .drop_inode     = generic_delete_inode,
+};
+
 
 static const struct inode_operations myfs_dir_inode_operations = {
 	/* TODO 5: Fill dir inode operations structure. */
@@ -60,13 +65,20 @@ struct inode *myfs_get_inode(struct super_block *sb, const struct inode *dir,
 	 *     - ino
 	 */
 
+
+	inode_init_owner(inode, NULL, mode);
+	inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
+	/* Allocate inode number */
+	inode->i_ino = get_next_ino();
+
 	/* TODO 5: Init i_ino using get_next_ino */
 
 	/* TODO 6: Initialize address space operations. */
 
 	if (S_ISDIR(mode)) {
 		/* TODO 3: set inode operations for dir inodes. */
-
+		inode->i_op = &simple_dir_inode_operations;
+		inode->i_fop = &simple_dir_operations;
 		/* TODO 5: use myfs_dir_inode_operations for inode
 		 * operations (i_op).
 		 */
@@ -74,6 +86,7 @@ struct inode *myfs_get_inode(struct super_block *sb, const struct inode *dir,
 		/* TODO 3: directory inodes start off with i_nlink == 2 (for "." entry).
 		 * Directory link count should be incremented (use inc_nlink).
 		 */
+		inc_nlink(inode);
 	}
 
 	/* TODO 6: Set file inode and file operations for regular files
@@ -96,6 +109,11 @@ static int myfs_fill_super(struct super_block *sb, void *data, int silent)
 	 *   - super operations
 	 *   - maxbytes
 	 */
+	sb->s_blocksize = MYFS_BLOCKSIZE;
+	sb->s_blocksize_bits = MYFS_BLOCKSIZE_BITS;
+	sb->s_magic = MYFS_MAGIC;
+	sb->s_op = &myfs_ops;
+	sb->s_maxbytes = MAX_LFS_FILESIZE;
 
 	/* mode = directory & access rights (755) */
 	root_inode = myfs_get_inode(sb, NULL,
@@ -123,18 +141,29 @@ static struct dentry *myfs_mount(struct file_system_type *fs_type,
 		int flags, const char *dev_name, void *data)
 {
 	/* TODO 1: call superblock mount function */
+	return mount_nodev(fs_type, flags, data, myfs_fill_super);
 }
 
 /* TODO 1: define file_system_type structure */
+static struct file_system_type myfs_fs_type = {
+	.name           = "myfs",
+	.mount          = myfs_mount,
+	.kill_sb        = kill_litter_super,
+	.fs_flags       = FS_REQUIRES_DEV,
+};
 
 static int __init myfs_init(void)
 {
 	int err;
 
 	/* TODO 1: register */
+	err = register_filesystem(&myfs_fs_type);
+
 	if (err) {
 		printk(LOG_LEVEL "register_filesystem failed\n");
 		return err;
+	} else {
+		printk(LOG_LEVEL "register_filesystem successful\n");
 	}
 
 	return 0;
@@ -143,6 +172,7 @@ static int __init myfs_init(void)
 static void __exit myfs_exit(void)
 {
 	/* TODO 1: unregister */
+	unregister_filesystem(&myfs_fs_type);
 }
 
 module_init(myfs_init);
