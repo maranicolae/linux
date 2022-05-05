@@ -92,21 +92,31 @@ static struct inode *minfs_iget(struct super_block *s, unsigned long ino)
 	 * the device, i.e. the block with the index 1. This is the index
 	 * to be passed to sb_bread().
 	 */
+	if (!(bh = sb_bread(s, 1)))
+		goto out_bad_sb;
 
 	/* TODO 4: Get inode with index ino from the block. */
+	mi = (struct minfs_inode *) bh->b_data + ino;
 
 	/* TODO 4: fill VFS inode */
+	i_uid_write(inode, raw_inode->i_uid);
+	i_gid_write(inode, raw_inode->i_gid);
+	inode->i_mode = mi->mode;
+	inode->i_size = mi->size;
 
 	/* TODO 7: Fill address space operations (inode->i_mapping->a_ops) */
 
 	if (S_ISDIR(inode->i_mode)) {
 		/* TODO 4: Fill dir inode operations. */
+		inode->i_op = &simple_dir_inode_operations;
+		inode->i_fop = &simple_dir_operations;
 
 		/* TODO 5: Use minfs_dir_inode_operations for i_op
 		 * and minfs_dir_operations for i_fop. */
 
 		/* TODO 4: Directory inodes start off with i_nlink == 2.
 		 * (use inc_link) */
+		inc_nlink(inode);
 	}
 
 	/* TODO 7: Fill inode and file operations for regular files
@@ -488,7 +498,7 @@ static int minfs_fill_super(struct super_block *s, void *data, int silent)
 
 	/* allocate root inode and root dentry */
 	/* TODO 2: use myfs_get_inode instead of minfs_iget */
-	root_inode = myfs_get_inode(s, NULL, MINFS_ROOT_INODE);
+	root_inode = minfs_iget(s, MINFS_ROOT_INODE);
 	if (!root_inode)
 		goto out_bad_inode;
 
