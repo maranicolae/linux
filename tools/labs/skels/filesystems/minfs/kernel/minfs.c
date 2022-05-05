@@ -240,17 +240,22 @@ static struct dentry *minfs_lookup(struct inode *dir,
 
 static struct inode *minfs_alloc_inode(struct super_block *s)
 {
-	struct minfs_inode_info *mii;
-
 	/* TODO 3: Allocate minfs_inode_info. */
 	/* TODO 3: init VFS inode in minfs_inode_info */
+	struct minfs_inode_info *ei;
+	ei =  kzalloc(sizeof(*ei), GFP_KERNEL);
+	if (!ei)
+		return NULL;
 
-	return &mii->vfs_inode;
+	inode_init_once(&ei->vfs_inode);
+
+	return &ei->vfs_inode;
 }
 
 static void minfs_destroy_inode(struct inode *inode)
 {
 	/* TODO 3: free minfs_inode_info */
+	kfree(container_of(inode, struct minfs_inode_info, vfs_inode));
 }
 
 /*
@@ -410,8 +415,32 @@ static const struct super_operations minfs_ops = {
 	.statfs		= simple_statfs,
 	.put_super	= minfs_put_super,
 	/* TODO 4: add alloc and destroy inode functions */
+	.alloc_inode = minfs_alloc_inode,
+	.free_inode	= minfs_destroy_inode,
 	/* TODO 7:	= set write_inode function. */
 };
+
+struct inode *myfs_get_inode(struct super_block *sb, const struct inode *dir,
+		int mode)
+{
+	struct inode *inode = new_inode(sb);
+
+	if (!inode)
+		return NULL;
+
+	inode_init_owner(inode, NULL, mode);
+	inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
+	/* Allocate inode number */
+	inode->i_ino = get_next_ino();
+
+	if (S_ISDIR(mode)) {
+		inode->i_op = &simple_dir_inode_operations;
+		inode->i_fop = &simple_dir_operations;
+		inc_nlink(inode);
+	}
+
+	return inode;
+}
 
 static int minfs_fill_super(struct super_block *s, void *data, int silent)
 {
@@ -435,20 +464,31 @@ static int minfs_fill_super(struct super_block *s, void *data, int silent)
 	 * the device, i.e. the block with the index 0. This is the index
 	 * to be passed to sb_bread().
 	 */
+	if (!(bh = sb_bread(s, 0)))
+		goto out_bad_sb;
 
 	/* TODO 2: interpret read data as minfs_super_block */
+	ms = (struct minfs_super_block *) bh->b_data;
 
 	/* TODO 2: check magic number with value defined in minfs.h. jump to out_bad_magic if not suitable */
+	if (MINFS_MAGIC != ms->magic) {
+		goto out_bad_magic;
+	}
 
 	/* TODO 2: fill super_block with magic_number, super_operations */
+	s->s_magic = ms->magic;
+	s->s_op = &minfs_ops;
 
 	/* TODO 2: Fill sbi with rest of information from disk superblock
 	 * (i.e. version).
 	 */
+	sbi->imap = ms->imap;
+	sbi->version = ms->version;
+	sbi->sbh = bh;
 
 	/* allocate root inode and root dentry */
 	/* TODO 2: use myfs_get_inode instead of minfs_iget */
-	root_inode = minfs_iget(s, MINFS_ROOT_INODE);
+	root_inode = myfs_get_inode(s, NULL, MINFS_ROOT_INODE);
 	if (!root_inode)
 		goto out_bad_inode;
 
@@ -482,12 +522,16 @@ static struct dentry *minfs_mount(struct file_system_type *fs_type,
 		int flags, const char *dev_name, void *data)
 {
 	/* TODO 1: call superblock mount function */
+	return mount_bdev(fs_type, flags, dev_name, data, minfs_fill_super);
 }
 
 static struct file_system_type minfs_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "minfs",
 	/* TODO 1: add mount, kill_sb and fs_flags */
+	.mount          = minfs_mount,
+	.kill_sb        = kill_block_super,
+	.fs_flags       = FS_USERNS_MOUNT,
 };
 
 static int __init minfs_init(void)
