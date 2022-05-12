@@ -218,12 +218,21 @@ static struct minfs_dir_entry *minfs_find_entry(struct dentry *dentry,
 	/* TODO 6: Read parent folder data block (contains dentries).
 	 * Fill bhp with return value.
 	 */
+	dir = d_inode(dentry->d_parent);
+	bh = sb_bread(sb, mii->data_block);
+	*bhp = bh;
 
 	for (i = 0; i < MINFS_NUM_ENTRIES; i++) {
 		/* TODO 6: Traverse all entries, find entry by name
 		 * Use `de' to traverse. Use `final_de' to store dentry
 		 * found, if existing.
 		 */
+		de = (struct minfs_dir_entry *) (bh->b_data + i);
+		size_t min_len = strlen(name) < strlen(de->name) ? strlen(name) :  strlen(de->name);
+		if (strncmp(name, de->name, min_len) == 0) {
+			final_de = de;
+			break;
+		}
 	}
 
 	/* bh needs to be released by caller. */
@@ -234,7 +243,7 @@ static struct dentry *minfs_lookup(struct inode *dir,
 		struct dentry *dentry, unsigned int flags)
 {
 	/* TODO 6: Comment line. */
-	return simple_lookup(dir, dentry, flags);
+	// return simple_lookup(dir, dentry, flags);
 
 	struct super_block *sb = dir->i_sb;
 	struct minfs_dir_entry *de;
