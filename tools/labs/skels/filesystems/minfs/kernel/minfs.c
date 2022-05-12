@@ -115,6 +115,8 @@ static struct inode *minfs_iget(struct super_block *s, unsigned long ino)
 
 		/* TODO 5: Use minfs_dir_inode_operations for i_op
 		 * and minfs_dir_operations for i_fop. */
+		inode->i_op = &minfs_dir_inode_operations;
+		inode->i_fop = &minfs_dir_operations;
 
 		/* TODO 4: Directory inodes start off with i_nlink == 2.
 		 * (use inc_link) */
@@ -156,31 +158,37 @@ static int minfs_readdir(struct file *filp, struct dir_context *ctx)
 	int err = 0;
 
 	/* TODO 5: Get inode of directory and container inode. */
+	inode = file_inode(filp);
+	mii = container_of(inode, struct minfs_inode_info, vfs_inode);
 
 	/* TODO 5: Get superblock from inode (i_sb). */
+	sb = inode->i_sb;
 
 	/* TODO 5: Read data block for directory inode. */
+	bh = sb_bread(sb, mii->data_block);
 
 	for (; ctx->pos < MINFS_NUM_ENTRIES; ctx->pos++) {
 		/* TODO 5: Data block contains an array of
 		 * "struct minfs_dir_entry". Use `de' for storing.
 		 */
+		(struct minfs_dir_entry *)(bh->b_data + ctx->pos);
 
 		/* TODO 5: Step over empty entries (de->ino == 0). */
-
-		/*
-		 * Use `over` to store return value of dir_emit and exit
-		 * if required.
-		 */
-		over = dir_emit(ctx, de->name, MINFS_NAME_LEN, de->ino,
-				DT_UNKNOWN);
-		if (over) {
-			printk(KERN_DEBUG "Read %s from folder %s, ctx->pos: %lld\n",
-				de->name,
-				filp->f_path.dentry->d_name.name,
-				ctx->pos);
-			ctx->pos++;
-			goto done;
+		if (de->ino) {
+			/*
+			* Use `over` to store return value of dir_emit and exit
+			* if required.
+			*/
+			over = dir_emit(ctx, de->name, MINFS_NAME_LEN, de->ino,
+					DT_UNKNOWN);
+			if (over) {
+				printk(KERN_DEBUG "Read %s from folder %s, ctx->pos: %lld\n",
+					de->name,
+					filp->f_path.dentry->d_name.name,
+					ctx->pos);
+				ctx->pos++;
+				goto done;
+			}
 		}
 	}
 
