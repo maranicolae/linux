@@ -50,6 +50,7 @@ static struct socket *new_sock;	/* communication socket */
 int __init my_tcp_sock_init(void)
 {
 	int err;
+	struct sockaddr_in sock_addr;
 	/* address to bind on */
 	struct sockaddr_in addr = {
 		.sin_family	= AF_INET,
@@ -61,23 +62,61 @@ int __init my_tcp_sock_init(void)
 	struct sockaddr_in raddr;
 
 	/* TODO 1: create listening socket */
+	err = sock_create_kern(&init_net, PF_INET, SOCK_STREAM, IPPROTO_TCP, &sock);
+	if (err < 0) {
+		pr_info("sock_create_kern failed\n");
+		return -ENOMEM;
+	}
 
 	/* TODO 1: bind socket to loopback on port MY_TCP_PORT */
+	err = sock->ops->bind(sock, (struct sockaddr *) &addr, addrlen);
+	if (err < 0) {
+		pr_info("bind failed\n");
+		goto out_release;
+	}
 
 	/* TODO 1: start listening */
+	err = sock->ops->listen(sock, LISTEN_BACKLOG);
+	if (err < 0) {
+		pr_info("listen failed\n");
+		goto out_release;
+	}
 
 	/* TODO 2: create new socket for the accepted connection */
+	err = sock_create_lite(PF_INET, SOCK_STREAM, IPPROTO_TCP, &new_sock);
+	if (err < 0) {
+		pr_info("sock_create_lite failed\n");
+		goto out;
+	}
+	new_sock->ops = sock->ops;
 
 	/* TODO 2: accept a connection */
+	err = sock->ops->accept(sock, new_sock, 0, true);
+	if (err == -EAGAIN) {
+		err = sock->ops->accept(sock, new_sock, 0, true);
+	}
+
+	if (err) {
+		pr_info("accept failed\n");
+		goto out_release_new_sock;
+	}
 
 	/* TODO 2: get the address of the peer and print it */
-
+	err = sock->ops->getname(new_sock,
+				(struct sockaddr *)&sock_addr, 1);
+	if (err < 0) {
+		printk(LOG_LEVEL "can't find peer name\n");
+		goto out_release_new_sock;
+	}
+	print_sock_address(sock_addr);
 	return 0;
 
 out_release_new_sock:
 	/* TODO 2: cleanup socket for accepted connection */
+	sock_release(new_sock);
 out_release:
 	/* TODO 1: cleanup listening socket */
+	sock_release(sock);
 out:
 	return err;
 }
@@ -85,8 +124,10 @@ out:
 void __exit my_tcp_sock_exit(void)
 {
 	/* TODO 2: cleanup socket for accepted connection */
+	sock_release(new_sock);
 
 	/* TODO 1: cleanup listening socket */
+	sock_release(sock);
 }
 
 module_init(my_tcp_sock_init);
