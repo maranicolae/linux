@@ -1,0 +1,30 @@
+Exercitiul 1: Load & Unload module
+Dupa make boot si deschiderea cu minicom trebuie sa apara directorul skel pe masina.
+insmod skels/kernel_modules/1-2-test-mod/hello_mod.ko
+rmmod skels/kernel_modules/1-2-test-mod/hello_mod.ko 
+
+Exercitiul 2: 
+Ascundere print de la consola sa fie disponibila doar prin dmesg.
+dmesg -n 5
+
+Exercitiul 3:
+Am comparat fisierele de la task 3 si task1-2, am observat ca lipseste linia cu #include <linux/module.h>
+
+Exercitiul 4:F
+In fisierul Kbuild am completat regulile pentru a obtine modulul mod.ko ce este compus din mod1.o si mod2.o
+
+Exercitiul 5:
+Dupa ce am dat modulului am folosit comanda dmesg | tail -32 > out pentru a inspecta outputul si identifica problema.
+                                       
+BUG: kernel NULL pointer dereference, address: 00000000
+EIP: my_oops_init+0xd/0x22 [oops_mod]
+
+Apoi pentru a identifica excat linia am folosit:
+addr2line -e skels/kernel_modules/5-oops-mod/oops_mod.o 0xd
+
+Exercitiul 6:
+Am dat ca parametru in linia de comanda str atunci cand se da load modulului.
+insmod skels/kernel_modules/6-cmd-mod/cmd_mod.ko str="tierd"
+
+Exercitiul 7:
+Am fost nevoita sa mut declaratia lui p in afara functiei. Am afisat PID-ul si numele executabilului.
